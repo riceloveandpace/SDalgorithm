@@ -35,13 +35,13 @@ data = data(begin_time*Fs+1:end_time*Fs+1,:);
 
 ainds = zeros(numChannels, 1);
 %Compute all of the detection parameters for this channel using LearnParameters
-[d(1).thresh, d(1).flip,d(1).alength] = newcode(data(:,1));
+[d(1).thresh, d(1).flip,d(1).alength] = atrialParamLearning(data(:,1));
 
 %Beat detection w/ the learnt parameters
-[aind1] = atrial_peak_finder(d(1), data(:,1));
+aind = atrial_peak_finder(d(1), data(:,1));
 figure; hold on;
 plot(data,'b');
-plot(padarray(aind1.',[0 1],'pre'), d.thresh*d.flip, 'xk');
+plot(padarray(aind.',[0 1],'pre'), d.thresh*d.flip, 'xk');
 title('Channel 16','Fontsize',18)
 %legend({'input waveform','detected ventricles','detected atria'},'Fontsize',18)
 xlabel('time (samples)','Fontsize',14)
