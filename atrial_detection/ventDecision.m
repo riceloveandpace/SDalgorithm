@@ -10,6 +10,7 @@ function ventDecision
 %
 %Output:
 %Plots that will showcase ventricular beat detection.
+in1 = input('Enter channel: "atr", or "vent"','s');
 
 close all
 addpath('test_data')
@@ -28,7 +29,11 @@ s = load('ep1SR.mat');
 %Fs = s.Fs;
 Fs = 1000;
 data = s.PATIENT1SINUSRHYTHMNUMBERSONLY;
-data = data(:,10);
+if in1 == 'vent'
+    data = data(:,16);
+elseif in1 == 'atr'
+    data = data(:,10);
+end
 %size(data)
 %Define the amount of data that we want to use for parameter learning and
 %detection.
@@ -80,6 +85,9 @@ d = ds;
 hold on;
 h=plot(data,'k');
 a=plot([0 d.PeakInd], d.thresh*d.flip, 'or'); h=[h a(1)];
-title(['Channel ' num2str(i)],'Fontsize',14)
-legend(h,{'data','ventricular peaks','atrial peaks'},'Fontsize',14)
+if in1 == 'vent'
+    title('Ventricular Channel','Fontsize',14)
+elseif in1 == 'atr'
+    title('Atrial Channel','Fontsize',14)
+legend(h,{'data','peaks'},'Fontsize',14)
 end
