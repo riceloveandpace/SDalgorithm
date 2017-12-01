@@ -1,7 +1,8 @@
 function ventDecision
 
 %This script simulates our algorithm in real time.  It performs parameter
-%learning on a given channel of data. It finds the peak for atrial/ventricular data.
+%learning on each channel of data.  In addition, it will perform beat
+%detection on each of the channels.
 %
 %Input:
 %s - Structure that will contain the data, with multiple channels, and
@@ -48,30 +49,38 @@ ds = struct();
 
 ds.beatDelay = 0; %Tracks amount of time since last ventricular beat.
 ds.beatFallDelay = 0;%Tracks amount of time since last falling edge of ventricular beat.
+ds.PostVARP = 250;%Minimum time between ventricular then atrial beat.
+ds.PreVARP = 20; % check!!!!!
+ds.PostAVRP = 100;%Minimum time between atrial then ventricular beat.
+ds.PreAVRP = 20; % check
 ds.VV = 350;
 
 %these are used for doing real time detection
 ds.recentBools = zeros(1,ds.length); %Binary value indicating whether recent values have exceeded v_thresh
 ds.last_sample_is_sig = false;%Flag indicating whether last sample was a V beat
+%
+%These variables are just used for testing and visualization, not actually
+%used in the algorithm.
 ds.PeakInd = [];
 ds.recentdatapoints = zeros(1,ds.VV);
 
 %This loop models real time data acquisition in an actual hardware system.
 for i = 1:numSamples
+    
     %Increment time since last atrial beat d.
     ds.recentdatapoints = [ds.recentdatapoints(2:end) data(i)];
     %get next datapoint and add to buffer
+    
     %increment all delays when considering each sample in real time.
     ds.beatDelay = ds.beatDelay + 1;
     ds.beatFallDelay = ds.beatFallDelay + 1;
+    
     %Perform beat detection with the knowledge of the new sample.
-    %ds = yamPeakFinder(i,ds);
     ds = singlePeakFinder(i,ds);
 end
 
 figure
 d = ds;
-%    scale = numChannels*10^floor(log10(max(data)));
 hold on;
 h=plot(data,'k');
 a=plot([0 d.PeakInd], d.thresh*d.flip, 'or'); h=[h a(1)];
