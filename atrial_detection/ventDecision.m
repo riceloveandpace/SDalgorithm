@@ -49,10 +49,6 @@ ds = struct();
 
 ds.beatDelay = 0; %Tracks amount of time since last ventricular beat.
 ds.beatFallDelay = 0;%Tracks amount of time since last falling edge of ventricular beat.
-ds.PostVARP = 250;%Minimum time between ventricular then atrial beat.
-ds.PreVARP = 20; % check!!!!!
-ds.PostAVRP = 100;%Minimum time between atrial then ventricular beat.
-ds.PreAVRP = 20; % check
 ds.VV = 350;
 
 %these are used for doing real time detection
