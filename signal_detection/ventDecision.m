@@ -32,7 +32,7 @@ data = s.PATIENT1SINUSRHYTHMNUMBERSONLY;
 if in1 == 'ven'
     data = data(:,16);
 elseif in1 == 'atr'
-    data = data(:,10);
+    data = data(:,16);
 end
 %size(data)
 %Define the amount of data that we want to use for parameter learning and
@@ -50,14 +50,33 @@ ds = struct();
 
 %Compute all of the detection parameters for this channel using
 %LearnParameters (LearnParameters will also call LearnLengths.
-[ds.thresh,ds.flip,ds.length]=atrialParamLearning(datalearn);
-
+[ds.thresh,ds.flip,ds.len]=atrialParamLearning(datalearn);
+% for simplicity I referred to the non-real-time algorithm
+[aindlearn] = atrial_peak_finder(ds, datalearn); 
+% learn the energy threshold
+j = 1; ennoise = [];
+for i = 1:length(datalearn(:,1))-ds.len % (+-80) out of the atrial peak count as noise
+    if j <= length(aindlearn)
+        if i < aindlearn(j)-80 % i.e. smaller than a peak
+            ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+        elseif i > aindlearn(j) - 80 && i < aindlearn(j) + 80
+          %  disp('in a beat')
+        elseif i == aindlearn(j) + 80
+            ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+            j = j + 1;
+        end
+    else
+        ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+    end
+end
+noiseavg = mean(ennoise);
+ds.noiseavg = noiseavg;
 ds.beatDelay = 0; %Tracks amount of time since last ventricular beat.
 ds.beatFallDelay = 0;%Tracks amount of time since last falling edge of ventricular beat.
 ds.VV = 350;
 
 %these are used for doing real time detection
-ds.recentBools = zeros(1,ds.length); %Binary value indicating whether recent values have exceeded v_thresh
+ds.recentBools = zeros(1,ds.len); %Binary value indicating whether recent values have exceeded v_thresh
 ds.last_sample_is_sig = false;%Flag indicating whether last sample was a V beat
 %
 %These variables are just used for testing and visualization, not actually
@@ -66,18 +85,44 @@ ds.PeakInd = [];
 ds.recentdatapoints = zeros(1,ds.VV);
 
 %This loop models real time data acquisition in an actual hardware system.
+storlen = 50;
+ds.storen = zeros(1,storlen); % this need to be stored for previous samples !!!
+ds.startind = [];
+ds.endind = [];
+ds.findEnd = 'f';
+
 for i = 1:numSamples
     
     %Increment time since last atrial beat d.
     ds.recentdatapoints = [ds.recentdatapoints(2:end) data(i)];
-    %get next datapoint and add to buffer
-    
+    ds.storen = [ds.storen(2:end) sumabs(ds.recentdatapoints(ds.VV-ds.len+1:ds.VV))];
     %increment all delays when considering each sample in real time.
     ds.beatDelay = ds.beatDelay + 1;
     ds.beatFallDelay = ds.beatFallDelay + 1;
     
     %Perform beat detection with the knowledge of the new sample.
     ds = singlePeakFinder(i,ds);
+    % Perform start detection: need some memory
+    if ds.last_sample_is_sig % then go and find start
+        ds.findEnd = 't';
+        tempen = ds.storen(end);
+        k = 0;
+        while tempen >= noiseavg
+            % search back for start
+            k = k - 1;
+            tempen = ds.storen(storlen+k);
+            if tempen < noiseavg
+                ds.startind = [ds.startind;i+k];
+            end
+        end
+    end
+    % wait to perform end detection
+    if ds.findEnd == 't' % for each subsequent datapoint
+        if ds.storen(end) < noiseavg
+            ds.endind = [ds.endind;i];
+            ds.findEnd = 'f';
+        end
+    end
 end
 
 figure
@@ -85,6 +130,8 @@ d = ds;
 hold on;
 h=plot(data,'k');
 a=plot([0 d.PeakInd], d.thresh*d.flip, 'or'); h=[h a(1)];
+plot([0 ds.startind'],500,'xr')
+plot([0 ds.endind'],500,'xb')
 if in1 == 'ven'
     title('Ventricular Channel','Fontsize',14)
 elseif in1 == 'atr'
