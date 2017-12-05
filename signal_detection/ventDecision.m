@@ -1,4 +1,4 @@
-function ventDecision
+%%function ventDecision
 
 %This script simulates our algorithm in real time.  It performs parameter
 %learning on each channel of data.  In addition, it will perform beat
@@ -12,7 +12,7 @@ function ventDecision
 %Plots that will showcase ventricular beat detection.
 in1 = input('Enter channel: "atr", or "ven"','s');
 
-close all
+%close all
 addpath('test_data')
 addpath('test_data/sept29_2016_test/')
 addpath('test_data/PhisioBank_iaf/')
@@ -29,10 +29,14 @@ s = load('ep1SR.mat');
 %Fs = s.Fs;
 Fs = 1000;
 data = s.PATIENT1SINUSRHYTHMNUMBERSONLY;
-if in1 == 'ven'
+if in1 == 'ven1'
+    data = data(:,17);
+elseif in1 == 'atr1'
     data = data(:,16);
-elseif in1 == 'atr'
-    data = data(:,16);
+elseif in1 == 'atr2'
+    data = data(:,15);
+elseif in1 == 'ven2'
+    data = data(:,18);
 end
 %size(data)
 %Define the amount of data that we want to use for parameter learning and
@@ -55,22 +59,28 @@ ds = struct();
 [aindlearn] = atrial_peak_finder(ds, datalearn); 
 % learn the energy threshold
 j = 1; ennoise = [];
-for i = 1:length(datalearn(:,1))-ds.len % (+-80) out of the atrial peak count as noise
+windlen = 8;
+for i = 1:length(datalearn(:,1))-windlen%ds.len % (+-80) out of the atrial peak count as noise
     if j <= length(aindlearn)
         if i < aindlearn(j)-80 % i.e. smaller than a peak
-            ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+        %    if i > aindlearn(j) - 500 % start
+            ennoise = [ennoise;sumabs(data(i:i+windlen))-windlen*abs(mean(data(i:i+windlen)))];%ds.len))];
+        %    else % end
+        %    ennoise2 = [ennoise2;sumabs(data(i:i+windlen))-windlen*abs(mean(data(i:i+windlen)))];%ds.len))];
+        %    end
         elseif i > aindlearn(j) - 80 && i < aindlearn(j) + 80
           %  disp('in a beat')
         elseif i == aindlearn(j) + 80
-            ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+            ennoise = [ennoise;sumabs(data(i:i+windlen))-windlen*abs(mean(data(i:i+windlen)))];%ds.len))];
             j = j + 1;
         end
     else
-        ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+        ennoise = [ennoise;sumabs(data(i:i+windlen))-windlen*abs(mean(data(i:i+windlen)))];%ds.len))];
     end
 end
 noiseavg = mean(ennoise);
 ds.noiseavg = noiseavg;
+
 ds.beatDelay = 0; %Tracks amount of time since last ventricular beat.
 ds.beatFallDelay = 0;%Tracks amount of time since last falling edge of ventricular beat.
 ds.VV = 350;
@@ -83,19 +93,27 @@ ds.last_sample_is_sig = false;%Flag indicating whether last sample was a V beat
 %used in the algorithm.
 ds.PeakInd = [];
 ds.recentdatapoints = zeros(1,ds.VV);
-
+%%
 %This loop models real time data acquisition in an actual hardware system.
-storlen = 50;
+storlen = 120;
 ds.storen = zeros(1,storlen); % this need to be stored for previous samples !!!
 ds.startind = [];
 ds.endind = [];
 ds.findEnd = 'f';
-
-for i = 1:numSamples
-    
+enStor = 't';
+ennew = []; enallnew = [];
+for i = 1:numSamples-5
     %Increment time since last atrial beat d.
     ds.recentdatapoints = [ds.recentdatapoints(2:end) data(i)];
-    ds.storen = [ds.storen(2:end) sumabs(ds.recentdatapoints(ds.VV-ds.len+1:ds.VV))];
+    % store the energy every 2 timestamps
+   % if enStor == 't'
+   tempmean = mean(ds.recentdatapoints(ds.VV-windlen:ds.VV));
+   ennew = sumabs(ds.recentdatapoints(ds.VV-windlen:ds.VV))-windlen*abs(tempmean);%ds.len+1:ds.VV))
+        ds.storen = [ds.storen(2:end) ennew];
+   %     enStor = 'f';
+  %  else
+  %      enStor = 't';
+  %  end
     %increment all delays when considering each sample in real time.
     ds.beatDelay = ds.beatDelay + 1;
     ds.beatFallDelay = ds.beatFallDelay + 1;
@@ -107,23 +125,26 @@ for i = 1:numSamples
         ds.findEnd = 't';
         tempen = ds.storen(end);
         k = 0;
+        ds.storen;
         while tempen >= noiseavg
             % search back for start
             k = k - 1;
             tempen = ds.storen(storlen+k);
             if tempen < noiseavg
-                ds.startind = [ds.startind;i+k];
+                ds.startind = [ds.startind;i+k-windlen];
             end
         end
     end
     % wait to perform end detection
     if ds.findEnd == 't' % for each subsequent datapoint
         if ds.storen(end) < noiseavg
-            ds.endind = [ds.endind;i];
+            ds.endind = [ds.endind;i+windlen];
             ds.findEnd = 'f';
         end
     end
 end
+
+ds.startend = [ds.startind ds.endind];
 
 figure
 d = ds;
@@ -132,9 +153,20 @@ h=plot(data,'k');
 a=plot([0 d.PeakInd], d.thresh*d.flip, 'or'); h=[h a(1)];
 plot([0 ds.startind'],500,'xr')
 plot([0 ds.endind'],500,'xb')
+en = [];
+for i = 1:length(data)-5
+    tempdat = data(i:i+5);
+    meannoise = mean(tempdat);
+    en = [en; sumabs(tempdat)-5*abs(meannoise)];
+end
+plot(en)
+plot([0,60000],[noiseavg,noiseavg])
+%%
 if in1 == 'ven'
     title('Ventricular Channel','Fontsize',14)
 elseif in1 == 'atr'
     title('Atrial Channel','Fontsize',14)
 legend(h,{'data','peaks'},'Fontsize',14)
 end
+plot([0,atrall(:,1)'],400,'or')
+plot([0,atrall(:,2)'],400,'ob')
