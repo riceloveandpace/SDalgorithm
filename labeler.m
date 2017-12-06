@@ -11,15 +11,20 @@
 % peak
 function labeler
 dataFolder = '/Users/yujunchen/文稿/rice/seniordesign/Data/EPStudys/'; % input
-filename = 'ep1TerminatingTachy.mat';%'ep1SVT.mat';%'ep1SR.mat'; % input
-initpt = 1; % starting beat; input
-in1 = input('Enter channel: "his","atr", or "vent"','s');
-if in1 == 'his'
-    chnl = [10,11,12,13,14,15];
-elseif in1 == 'atr'
+filename = 'ep1SR.mat';%'ep1TerminatingTachy.mat';%'ep1SVT.mat';%'ep1SR.mat'; % input
+in0 = input('Specify start timestamp:');
+initpt = in0;%49358; % starting beat; input
+in1 = input('Enter channel: "hiss","atr1", "atr2", "ven1", or "ven2"','s');
+if in1 == 'hiss'
+    chnl = [10,11,12,13,14];
+elseif in1 == 'atr1'
     chnl = 16;
-elseif in1 == 'vent'
+elseif in1 == 'ven1'
     chnl = 17;
+elseif in1 == 'atr2'
+    chnl = 15;
+elseif in1 == 'ven2'
+    chnl = 18;
 end
 overlap = 200; % specify overlay; input
 labelergui(dataFolder,filename,initpt,chnl,overlap)
@@ -35,10 +40,11 @@ else
 end
 cont = 1; idx = 0;
 ven = []; atr = []; his = []; rep = [];
+chunklength = 800;
 % the vector of time stamp to be saved; can be expanded in the function manually
 
-figure(); hold on
-chunk = sgnl(1:1000,:);
+figure(); hold on; ylim([-5000,5000])
+chunk = sgnl(1:chunklength,:);
 for i = 1:size(chunk,2)
     plot(chunk(:,i))
 end
@@ -51,15 +57,15 @@ while (cont == 1)
     clck = input('Enter color: (r - vent, b - his, m - repo, or g - atr), or hit n to go to the next frame, or hit end to stop the program','s');
     if clck == 'n'
         idx = idx + 1;
-        chunk = sgnl(idx*overlap+1:idx*overlap+1000);
+        chunk = sgnl(idx*(chunklength-overlap)+1:idx*(chunklength-overlap)+chunklength);
         close;
-        figure(); plot(chunk,'b'); hold on; plot(chunk(1:(1000-overlap)),'r'); H = uicontrol();
+        figure(); plot(chunk,'b'); hold on; plot(chunk(1:(overlap)),'r'); H = uicontrol();ylim([-5000,5000]);
         if length(chnl) == 5
-            title(strcat('filename ',', channel: his, starting at:',num2str(initpt+idx*overlap)))
+            title(strcat('filename ',', channel: his, starting at:',num2str(initpt+idx*(chunklength-overlap))))
         elseif chnl == 15
-            title(strcat('filename ',', channel: atrial, starting at:',num2str(initpt+idx*overlap)))
+            title(strcat('filename ',', channel: atrial, starting at:',num2str(initpt+idx*(chunklength-overlap))))
         elseif chnl == 16
-            title(strcat('filename ',', channel: ventricle, starting at:',num2str(initpt+idx*overlap)))            
+            title(strcat('filename ',', channel: ventricle, starting at:',num2str(initpt+idx*(chunklength-overlap))))            
         end
     elseif clck == 'end'
         cont = 0;
@@ -71,7 +77,7 @@ while (cont == 1)
             pt = plot(x,y,'*','color',clck);
             satisfy = input('hit enter if you like it and hit z if you do not','s');
             if isempty(satisfy) % then save in this step
-                x = initpt-1 + x + idx*(1000-overlap); % add the offset back to get real timestamp
+                x = initpt-1 + x + idx*(chunklength-overlap); % add the offset back to get real timestamp
                 allx = allx + x*[1,0]*(q==1)+x*[0,1]*(q==2);
             elseif satisfy == 'z'
                 disp('Redraw: this point is not saved');
@@ -83,7 +89,7 @@ while (cont == 1)
                     pt = plot(x,y,'*','color',clck);
                     satisfy = input('hit enter if you like it and hit z if you do not','s');
                     if isempty(satisfy)
-                        x = initpt-1 + x + idx*(1000-overlap);
+                        x = initpt-1 + x + idx*(chunklength-overlap);
                         allx = allx + x*[1,0]*(q==1)+x*[0,1]*(q==2);
                         ridx = 0;
                     elseif satisfy == 'z'
@@ -100,9 +106,9 @@ while (cont == 1)
         end
         
     end
-end
 save(strcat(filename,num2str(initpt),'_ventricular_timestamp.mat'),'ven')
 save(strcat(filename,num2str(initpt),'_his_timestamp.mat'),'his')
 save(strcat(filename,num2str(initpt),'_atrial_timestamp.mat'),'atr')
 save(strcat(filename,num2str(initpt),'_repolarization_timestamp.mat'),'rep')
+end
 end
