@@ -59,7 +59,7 @@ ds = struct();
 [aindlearn] = atrial_peak_finder(ds, datalearn); 
 % learn the energy threshold
 j = 1; ennoise = [];
-windlen = 8;
+windlen = 5;
 for i = 1:length(datalearn(:,1))-windlen%ds.len % (+-80) out of the atrial peak count as noise
     if j <= length(aindlearn)
         if i < aindlearn(j)-80 % i.e. smaller than a peak
@@ -146,27 +146,23 @@ end
 
 ds.startend = [ds.startind ds.endind];
 
-figure
+%figure
+subplot(1,2,2)
 d = ds;
 hold on;
 h=plot(data,'k');
 a=plot([0 d.PeakInd], d.thresh*d.flip, 'or'); h=[h a(1)];
 plot([0 ds.startind'],500,'xr')
 plot([0 ds.endind'],500,'xb')
-en = [];
-for i = 1:length(data)-5
-    tempdat = data(i:i+5);
-    meannoise = mean(tempdat);
-    en = [en; sumabs(tempdat)-5*abs(meannoise)];
-end
-plot(en)
-plot([0,60000],[noiseavg,noiseavg])
-%%
-if in1 == 'ven'
-    title('Ventricular Channel','Fontsize',14)
-elseif in1 == 'atr'
-    title('Atrial Channel','Fontsize',14)
-legend(h,{'data','peaks'},'Fontsize',14)
-end
+detectStartend = ds.startend;
+xlabel('timestamp')
+ylabel('Magnitude')
+save('detect_ep1SR_ventall_Ch18.mat','detectStartend')
+% if in1 == 'ven'
+%     title('Ventricular Channel','Fontsize',14)
+% elseif in1 == 'atr'
+%     title('Atrial Channel','Fontsize',14)
+% legend(h,{'data','peaks'},'Fontsize',14)
+% end
 plot([0,atrall(:,1)'],400,'or')
 plot([0,atrall(:,2)'],400,'ob')
