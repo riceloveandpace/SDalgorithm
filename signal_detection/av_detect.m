@@ -1,6 +1,5 @@
 % atrial detection: this is a simplified version of multisite_detect and
 % functions on the HRA channel to detect the atrial signal
-% detects peak and start and end points
 % not real-time
 %Input:
 %s - Structure that will contain the data, with multiple channels, and
@@ -27,7 +26,7 @@ data = s.PATIENT1SINUSRHYTHMNUMBERSONLY;
 begin_time = 0.0;
 end_time = 7; %second
 % use only the HRA channel from the data
-data = data(:,15);%16);
+data = data(:,16);%16);
 %data = filter(b2,1,filter(b,1,data(:,16)));
 datalearn = data(begin_time*Fs+1:end_time*Fs+1,:);
 datadown = datalearn(1:5:end);
@@ -68,13 +67,13 @@ title('Channel 16','Fontsize',18)
 xlabel('time (samples)','Fontsize',14)
 
 % start/stop detection
-j = 1; en = [];
-for i = 1:length(data)-5%d(1).len
-%    temppeak = aind1(j);
-    tempdat = data(i:i+5);%d(1).len);
+j = 1; en = []; enall = [];
+for i = 1:length(data)-5
+    tempdat = data(i:i+5);
     meannoise = mean(tempdat);
-    en = [en; sumabs(tempdat)-5*abs(meannoise)];
+    en = [en; sumabs(tempdat)-8*abs(meannoise)];
 end
+
 startind = []; endind = [];
 for j = 1:length(aind1)
     for i = 1:length(data)-d(1).len
