@@ -1,0 +1,440 @@
+%function ventDecision
+
+%This script simulates our algorithm in real time.  It performs parameter
+%learning on each channel of data.  In addition, it will perform beat
+%detection on each of the channels.
+%
+%Input:
+%s - Structure that will contain the data, with multiple channels, and
+%appropriate sampling rate.
+%
+%Output:
+%Plots that will showcase ventricular beat detection.
+%{
+in1 = input('Enter channel: "atr", or "ven"','s');
+
+close all
+addpath('test_data')
+addpath('test_data/sept29_2016_test/')
+addpath('test_data/PhisioBank_iaf/')
+%addpath('test_data/FebruaryData/')
+% each .mat file contains a struct for data from a test
+% currently, each struct has two fields:
+% sampling_rate: the sampling rate of the data in Hz
+% data: a NxC matrix where each column represents a channel and each row
+%       represents a time point
+
+s = load('ep1SR.mat');
+
+%Set the sampling rate and data that we will be working with.
+%Fs = s.Fs;
+Fs = 1000;
+data = s.PATIENT1SINUSRHYTHMNUMBERSONLY;
+if in1 == 'ven'
+    data = data(:,16);
+    
+elseif in1 == 'atr'
+    hisdata = data(:,10:14);
+    data = data(:,16);
+end
+%size(data)
+%Define the amount of data that we want to use for parameter learning and
+%detection.
+begin_time = 0.0;
+end_time = 7; %second
+datalearn = data(begin_time*Fs+1:end_time*Fs+1,:);
+%data = [data(:,1) data(:,2) data(:,10:14)];
+[numSamples, numChannels] = size(data);
+size(data)
+%~~~~~~~~~~~~~~~~~~~~~
+%Channel Parameters
+%~~~~~~~~~~~~~~~~~~~~~
+ds = struct();
+
+%Compute all of the detection parameters for this channel using
+%LearnParameters (LearnParameters will also call LearnLengths.
+[ds.thresh,ds.flip,ds.len]=atrialParamLearning(datalearn);
+% for simplicity I referred to the non-real-time algorithm
+[aindlearn] = atrial_peak_finder(ds, datalearn); 
+% learn the energy threshold
+j = 1; ennoise = [];
+for i = 1:length(datalearn(:,1))-ds.len % (+-80) out of the atrial peak count as noise
+    if j <= length(aindlearn)
+        if i < aindlearn(j)-80 % i.e. smaller than a peak
+            ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+        elseif i > aindlearn(j) - 80 && i < aindlearn(j) + 80
+          %  disp('in a beat')
+        elseif i == aindlearn(j) + 80
+            ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+            j = j + 1;
+        end
+    else
+        ennoise = [ennoise;sumabs(data(i:i+ds.len))];
+    end
+end
+noiseavg = mean(ennoise);
+ds.noiseavg = noiseavg;
+ds.beatDelay = 0; %Tracks amount of time since last ventricular beat.
+ds.beatFallDelay = 0;%Tracks amount of time since last falling edge of ventricular beat.
+ds.VV = 350;
+
+%these are used for doing real time detection
+ds.recentBools = zeros(1,ds.len); %Binary value indicating whether recent values have exceeded v_thresh
+ds.last_sample_is_sig = false;%Flag indicating whether last sample was a V beat
+%
+%These variables are just used for testing and visualization, not actually
+%used in the algorithm.
+ds.PeakInd = [];
+ds.recentdatapoints = zeros(1,ds.VV);
+
+%This loop models real time data acquisition in an actual hardware system.
+storlen = 50;
+ds.storen = zeros(1,storlen); % this need to be stored for previous samples !!!
+ds.startind = [];
+ds.endind = [];
+ds.findEnd = 'f';
+for i = 1:numSamples
+    
+    %Increment time since last atrial beat d.
+    ds.recentdatapoints = [ds.recentdatapoints(2:end) data(i)];
+    ds.storen = [ds.storen(2:end) sumabs(ds.recentdatapoints(ds.VV-ds.len+1:ds.VV))];
+    %increment all delays when considering each sample in real time.
+    ds.beatDelay = ds.beatDelay + 1;
+    ds.beatFallDelay = ds.beatFallDelay + 1;
+    
+    %Perform beat detection with the knowledge of the new sample.
+    ds = singlePeakFinder(i,ds);
+    % Perform start detection: need some memory
+    if ds.last_sample_is_sig % then go and find start
+        ds.findEnd = 't';
+        tempen = ds.storen(end);
+        k = 0;
+        while tempen >= noiseavg
+            % search back for start
+            k = k - 1;
+            tempen = ds.storen(storlen+k);
+            if tempen < noiseavg
+                ds.startind = [ds.startind;i+k];
+            end
+        end
+    end
+    % wait to perform end detection
+    if ds.findEnd == 't' % for each subsequent datapoint
+        if ds.storen(end) < noiseavg
+            ds.endind = [ds.endind;i];
+            ds.findEnd = 'f';
+        end
+    end
+   
+            
+        
+        
+        
+       
+    
+    
+    
+    
+    
+end
+
+figure
+d = ds;
+hold on;
+h=plot(data,'k');
+a=plot([0 d.PeakInd], d.thresh*d.flip, 'or'); h=[h a(1)];
+plot([0 ds.startind'],500,'xr')
+plot([0 ds.endind'],500,'xb')
+if in1 == 'ven'
+    title('Ventricular Channel','Fontsize',14)
+elseif in1 == 'atr'
+    title('Atrial Channel','Fontsize',14)
+legend(h,{'data','peaks'},'Fontsize',14)
+end
+%}
+
+%aindlearn = ds.PeakInd;
+%vindlearn_combined = min(vindlearn(:,1),vindlearn2(:,1));
+hisdata = data(:,10:14);
+HisInfo = zeros(1,2);
+dh = struct();
+dh.NumberOfChannel = 5;
+dh.CountSize = 10;
+dh.MaxAH = 150;
+dh.MaxAA = 1200;
+dh.MinAA = 100;
+dh.MaxV = zeros(1,dh.NumberOfChannel);
+dh.MaxI = zeros(1,dh.NumberOfChannel);
+dh.diff = zeros(1,dh.NumberOfChannel);
+dh.lastHis = zeros(1,dh.NumberOfChannel);
+tempmaxV = zeros(1,dh.NumberOfChannel);
+dh.lastAind = 0;
+dh.Aind = 0;
+dh.Vind = 0;
+ventFound = 'f';
+atrialFound = 'f';
+lastAtrialFound = 'f';
+endoftest = 'f';
+StartHis = 'f';
+%for data point recording within one AV interval
+count = 0;
+repeat = 0;
+%for testing a/v detection logic
+ignored = 0;
+aindFound = [];
+aindEst = [];
+k=1;
+Vindset = [];
+n = 1;
+dh.sumHis = zeros(1,dh.NumberOfChannel);
+for i = 1:60000 %i here means time tracking for samples
+     if (k>66)
+          endoftest = 't';
+     else
+           endoftest = 'f';
+     end
+       
+    if (atrialFound == 'f')&&(endoftest == 'f')
+       %wait for atrial detection first
+
+       if (i <= dh.lastAind+dh.MaxAA) && (i==aindlearn(k)) %in c, send a start Signal/timestamp to His nodes
+           dh.Aind = aindlearn(k); %store the end timestamp of A
+           atrialFound = 't';
+           k = k+1; %look at next timestamp for A, for matlab simulation only
+           if (lastAtrialFound == 't')
+                n = n+1;
+           end
+           aindFound = [aindFound dh.Aind];
+           lastAtrialFound = 't';
+           dh.lastAind = dh.Aind;
+           StartHis = 't'; %if detect A, start His Detection
+       elseif (i > dh.lastAind+dh.MaxAA) && (i<aindlearn(k)) 
+           %if excedding the expected reasonable AA time with no atrial
+           %found, use estimated new A timestamp 
+           atrialFound = 'f'; 
+           n = n+2;
+           lastAtrialFound = 'f';
+           dh.lastAind = dh.lastAind + dh.MaxAA;
+       else 
+           atrialFound = 'f';
+       end
+       
+    end
+       
+        %}
+    
+     
+       %hypothetical timestamp for V
+       
+
+       %found ventricle signal/is it V timestamp?
+       if (atrialFound == 't')&&(n<69)
+           if(n>0)
+               if (i == vindlearn_combined(n))
+                   dh.Vind = vindlearn_combined(n); %store the starting timestamp of V
+                   atrialFound = 'f';
+                   Vindset = [Vindset; dh.Vind];
+               else
+                   dh.Vind = dh.Aind + dh.MaxAH;
+               
+               end
+           end
+           
+       end
+       
+       %For Real Time His Detection on Node
+       if (StartHis == 't')&&(endoftest == 'f')
+           NumToCount = dh.Vind-dh.Aind;
+           MaxRepeat = floor(NumToCount/dh.CountSize); 
+           CountLeft = NumToCount - MaxRepeat*dh.CountSize;
+
+           
+           if ( i < dh.Vind) && (i > dh.Aind)
+                %update count & repeat
+                if repeat < MaxRepeat-1
+                    if (count < dh.CountSize) %count starts from 1, ends with 10
+                        count = count + 1;
+                    elseif (count == dh.CountSize) 
+                        repeat = repeat + 1; %finishing one repeated search within one AV interval
+                        count = 0;
+                    end
+
+                elseif (repeat == MaxRepeat-1)
+                    if (count < CountLeft) %count starts from 1, ends with CountLeft
+                        count = count + 1;
+                    %for end of AV, clear records of count&repeat
+                    elseif (count == CountLeft)
+                        count = 0;
+                        repeat = 0;
+                    end
+
+
+                end
+
+                %start searching each channel by picking largest signal in a chunk of datapoints
+               for h = 1:dh.NumberOfChannel
+                    iHis = hisdata(i,h); %incoming data sample
+                    %if a chunk of data have not collected completely
+                    if ((repeat < MaxRepeat-1) && (count < dh.CountSize-1)) || ((repeat == MaxRepeat-1) && (count < CountLeft-1)) %continue suming vals and diffs
+                        dh.sumHis(h) = dh.sumHis(h) + abs(iHis);
+                        dh.diff(h) = dh.diff(h) + abs(iHis - dh.lastHis(h));
+                        dh.lastHis(h) = iHis; %store last his for calc diff later
+                    else 
+                        %calc metrics for His Detection
+                        tempmaxV(h) = dh.diff(h)+dh.sumHis(h);
+                        if tempmaxV(h) > dh.MaxV(h)
+                            dh.MaxV(h) = tempmaxV(h);
+                            dh.MaxI(h) = i;
+                        end
+                    end
+
+
+
+               end
+
+           elseif ((i>=dh.Vind)&&(dh.Vind>0))
+               i
+               dh.Vind
+               [~,hchosen] = max(dh.MaxV);
+               hisI = dh.MaxI(hchosen);
+               hisV = hisdata(hisI,hchosen);
+               HisInfo = [HisInfo;hisV hisI];
+               StartHis = 'f';
+           end
+       end
+       
+       
+       %}
+   
+end
+
+figure();
+hold on;
+
+plot(hisdata(:,1));
+
+plot(hisdata(:,2));
+plot(hisdata(:,3));
+plot(hisdata(:,4));
+
+plot(hisdata(:,5));
+legend('1','2','3','4','5')
+plot(HisInfo(:,2),ones(1,length(HisInfo(:,2))),'r*');
+plot(aindFound, ones(1,length(aindFound)),'y*');
+plot(Vindset, ones(1,length(Vindset)),'b*')
+%}
+
+       
+        
+       
+%{
+%use vent ind as groundtruth due to its higher detection accuracy
+for k = 1:length(aindlearn)
+    dh.maxV = zeros(1,dh.NumberOfChannel);
+    dh.Vind = vindlearn_combined(n,1)+dh.Vdelay;
+    dh.Aind = aindlearn(k);
+    %{
+    if ((dh.Vind - dh.Aind) < dh.MaxAV) && ((dh.Vind - dh.Aind) > dh.MinAV)
+        n = n+1;
+        ventFound = 't';
+    if ()
+    else
+        ventFound = 'f';
+        dh.Vind =  dh.Aind + dh.MaxAV;
+        
+    end
+    %}
+    %if there is no atrial Found within range of MaxAA, atrial missed
+    if ((dh.Aind-dh.lastAind)<dh.MaxAA) && ((dh.Aind-dh.lastAind)>dh.MinAA)
+        atrialFound = 't';
+        k
+        atrialFound
+        n = n+1;
+        n
+    else
+        atrialFound = 'f';
+        
+        dh.Aind = dh.lastAind + dh.MaxAA;
+    end
+    %{
+    convert to c
+    if current time count exceeds maxAA && atrial not found-- atrial missed
+    %}
+    
+    %if there is atrial found within reasonable range, atrial detected
+    
+    %{
+    %if ventricle found within reasonable time intervals,ventricle found
+    elseif (dh.Vind - dh.Aind>dh.MinAV) && (dh.Vind-dh.Aind)<dh.MaxAV
+            ventFound = 't';
+    %if 
+    else
+            ventFound = 'f';
+            dh.Vind =  dh.Aind + dh.MaxAV;
+                    
+    end
+    %}
+    NumToCount = dh.Vind-dh.Aind;
+    MaxRepeat = floor(NumToCount/dh.CountSize); 
+    CountLeft = NumToCount - MaxRepeat*dh.CountSize;
+
+    hisdata_AV = hisdata(dh.Aind:dh.Vind,:);
+    %for each beat,loop to send data and a signal of successful/not atrial detection
+    for h = 1:dh.NumberOfChannel
+            %start searching each channel by picking largest signal in a chunk of datapoints
+        repeat = 0; %how many chunks of datapoints searched
+        count = 1;
+       % while (atrialFound == 't')  %if found the atrial beat, start his detection
+        %start recording 20 datapoints ahead
+        while(repeat< MaxRepeat-1)
+            while(count < dh.CountSize)
+                iHis = hisdata_AV(repeat*dh.CountSize+count,h); %incoming data sample
+                dh.recentdatapoints(count) = iHis; %store incoming 10 datapoints
+                if count > 1
+                    dh.diff(count) = iHis - dh.recentdatapoints(count-1);
+                end
+                
+                count = count + 1;
+            end
+            tempmaxV = sum((abs(dh.diff)))*sum(abs(dh.recentdatapoints));
+            if (tempmaxV > dh.maxV(h))
+                dh.maxV(h) = tempmaxV;
+                [~,I] = max(dh.recentdatapoints);
+                dh.maxI(h) = dh.Aind+repeat*dh.CountSize + I;
+                dh.maxI
+                h
+            end
+            repeat = repeat + 1;
+            count = 1;
+        end
+        
+        if (repeat == MaxRepeat-1)
+            while(count <= CountLeft)
+                 iHis = hisdata_AV(MaxRepeat*dh.CountSize+count,h); %incoming data sample
+                 dh.recentdatapoints(count) = iHis; %store incoming 10 datapoints
+                 if count > 1
+                    dh.diff(count) = iHis - dh.recentdatapoints(count-1);
+                 end
+                count = count + 1;
+            end
+            tempmaxV = sum((abs(dh.diff)))*sum(abs(dh.recentdatapoints));
+            if tempmaxV > dh.maxV(h)
+                dh.maxV(h) = tempmaxV;
+                [~,I] = max(dh.recentdatapoints);
+                dh.maxI(h) = dh.Aind+repeat*dh.CountSize + I;
+                maxI = dh.maxI;
+                h
+                dh.maxI
+            end
+        end
+
+    end
+
+    [~,hchosen] = max(dh.maxV);
+    hisI = dh.maxI(hchosen);
+    hisV = hisdata(hisI,hchosen);
+    HisInfo(k,:) = [hisV,hisI];
+    dh.lastAind = dh.Aind;
+   
+end
+%}
