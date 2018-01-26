@@ -1,8 +1,7 @@
 # Signal Detection MATLAB Code Overview
+An overview of the signal detection code written for MATLAB.
 
-========================
-
-asdf 
+----------------
 
 ### ventDecision.m 
 
