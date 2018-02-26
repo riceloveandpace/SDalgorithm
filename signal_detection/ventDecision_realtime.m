@@ -140,7 +140,7 @@ ds.lastPI = 0;
 for i = 1:numSamples
     
     k = data(i);
-    if (i > 1) && (abs(k) < ds.thresh) && (ds.findEnd == 'f') && (ds.findPeak == 'f')
+    if (abs(k) < ds.thresh) && (ds.findEnd == 'f') && (ds.findPeak == 'f')
         
         if abs(k) > ds.noiselvl%ds.noiselvl %found start index, ready to detect end point
             
