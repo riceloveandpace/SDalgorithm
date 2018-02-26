@@ -10,7 +10,7 @@ function [d] = atrialParamLearning(data,data2,data3,d)
     
     %learn height range for 5 seconds
     max_th = d.max_val/2;
-    min_th = max_th/10;
+    min_th = max_th/4;
     ths = linspace(max_th,min_th,20);
     count = zeros(1,length(ths));
     for i = 1:length(data2)
