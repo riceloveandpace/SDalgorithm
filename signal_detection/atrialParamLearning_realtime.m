@@ -1,9 +1,5 @@
 
 function [d] = atrialParamLearning(data,data2,data3,d)
-
-    %learn the appropriate lengths of atria, as well as
-    %which should be detected first, for + and - data
-    
     
     %learn max value for 3 seconds(for simplicity in matlab, used max function)
     d.max_val = max(data);
@@ -33,11 +29,8 @@ function [d] = atrialParamLearning(data,data2,data3,d)
     end
 
     d.cutoffs = [ths(idx(end)),ths(idx(2))];
-    %[~,af] = max(cutoffs(:,2)-cutoffs(:,1));
     %pick exact thresholds from the middle of the ranges according to mid_finders
     d.thresh = sum(d.cutoffs.*[0.5, 0.5])
-    
-    d.len = 1;
     
     %learn energy threshold value for 10 seconds
     last_vals = zeros(1,20);
