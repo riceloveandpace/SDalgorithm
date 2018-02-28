@@ -42,7 +42,7 @@ function [d] = atrialParamLearning(data,data2,data3,d)
         if count < 21
             last_vals(count) = k;
             
-        elseif (count > 20) && (k < d.thresh) && (j < d.lastPI + d.VV) 
+        elseif (k < d.thresh) && (j < d.lastPI + d.VV) 
             noiselvls = [noiselvls mean(abs(last_vals))];
             count = 0;
             last_vals = zeros(1,20); 
